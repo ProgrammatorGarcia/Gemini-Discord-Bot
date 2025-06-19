@@ -40,6 +40,7 @@ Gemini Discord Bot is an advanced, multimodal Discord bot leveraging Google Gene
     ```env
     DISCORD_BOT_TOKEN=your_discord_bot_token
     GOOGLE_API_KEY=your_google_api_key
+    GOOGLE_CSE_ID=your_google_cse_id
     ```
 
 4. Configure the bot:
@@ -92,10 +93,6 @@ This file contains various settings for the bot:
 ### NSFW Word Filtering (`nsfwWords.json`)
 
 Contains an array of words that should be filtered from prompts.
-
-## Community & Support
-
-- Join the [Discord Community](https://discord.com/invite/Gxpw7XF3Mj) for support, updates, and discussions.
 
 ### Contributions
 
