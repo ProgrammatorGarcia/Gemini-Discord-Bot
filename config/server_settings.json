@@ -12,5 +12,12 @@
     "customServerPersonality": false,
     "serverResponsePreference": false,
     "responseStyle": "embedded"
+  },
+  "669817842455019522": {
+    "serverChatHistory": false,
+    "settingsSaveButton": true,
+    "customServerPersonality": false,
+    "serverResponsePreference": false,
+    "responseStyle": "embedded"
   }
 }

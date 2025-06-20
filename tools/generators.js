@@ -1,9 +1,16 @@
 import axios from 'axios';
 import { EventSource } from 'eventsource';
 import WebSocket from 'ws';
+import { v4 as uuidv4 } from 'uuid';
+import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 import config from '../config.js';
 const { bannerMusicGen, nevPrompt } = config;
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 
 function getEventId() {
@@ -400,16 +407,123 @@ async function generateWithDalle3(prompt) {
   }
 }
 
+async function generateWithComfyUI(prompt, resolution) {
+  const serverAddress = '127.0.0.1:8188';
+  const clientId = uuidv4();
+
+  const { width, height } = getResolution(resolution);
+
+  return new Promise(async (resolve, reject) => {
+    let ws;
+    const timeout = setTimeout(() => {
+        if (ws) ws.close();
+        reject(new Error('ComfyUI generation timed out after 90 seconds.'));
+    }, 90000); // 90 second timeout
+
+    try {
+      // Load and modify the workflow
+      const workflowPath = path.join(__dirname, '..', 'ComfyUI_00120_.json');
+      const workflowTemplate = JSON.parse(await fs.readFile(workflowPath, 'utf-8'));
+      
+      // Put their putrid prompts here
+      workflowTemplate["6"].inputs.text = prompt;
+      
+      // Resolution set
+      workflowTemplate["27"].inputs.width = width;
+      workflowTemplate["27"].inputs.height = height;
+      workflowTemplate["30"].inputs.width = width;
+      workflowTemplate["30"].inputs.height = height;
+      
+      // Randomize that seed unf
+      workflowTemplate["25"].inputs.noise_seed = Math.floor(Math.random() * 1_000_000_000_000_000);
+      
+      // Unregistered lewd queue prompting action :o
+      async function queuePrompt(promptWorkflow) {
+        const body = { prompt: promptWorkflow, client_id: clientId };
+        const response = await fetch(`http://${serverAddress}/prompt`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!response.ok) {
+            throw new Error(`Failed to queue prompt: ${response.statusText}`);
+        }
+        return await response.json();
+      }
+
+      // Function to construct the final image URL
+      function getImageUrl(filename, subfolder, folderType) {
+        return `http://${serverAddress}/view?filename=${encodeURIComponent(filename)}&subfolder=${encodeURIComponent(subfolder)}&type=${encodeURIComponent(folderType)}`;
+      }
+
+      // Start the process by queueing the prompt
+      const promptResult = await queuePrompt(workflowTemplate);
+      if (!promptResult.prompt_id) {
+        return reject(new Error('Failed to get prompt_id. Response: ' + JSON.stringify(promptResult)));
+      }
+
+      // Connect to WebSocket to get the result
+            // Connect to WebSocket to get the result
+      ws = new WebSocket(`ws://${serverAddress}/ws?clientId=${clientId}`);
+      
+      ws.onmessage = async (event) => { // <-- The 'async' keyword is added here
+        const data = JSON.parse(event.data);
+
+        // We listen for the "executed" message for our SaveImage node (ID "9")
+        if (data.type === 'executed' && data.data.node === "9") { 
+          const outputImages = data.data.output.images;
+          if (outputImages && outputImages.length > 0) {
+            const firstImage = outputImages[0];
+            const imageUrl = getImageUrl(firstImage.filename, firstImage.subfolder, firstImage.type);
+            
+            // Fetch the image from the local ComfyUI server
+            const response = await fetch(imageUrl);
+            if (!response.ok) {
+              clearTimeout(timeout);
+              ws.close();
+              reject(new Error(`Failed to fetch image from ComfyUI: ${response.statusText}`));
+              return;
+            }
+            const imageBuffer = await response.arrayBuffer();
+
+            clearTimeout(timeout);
+            ws.close();
+            // Resolve with the buffer instead of the local URL
+            resolve({ images: [{ buffer: Buffer.from(imageBuffer) }], modelUsed: "ComfyUI" });
+          }
+        } else if (data.type === 'execution_error') {
+          clearTimeout(timeout);
+          ws.close();
+          reject(new Error(`ComfyUI execution error: ${JSON.stringify(data.data)}`));
+        }
+      };
+      
+      ws.onerror = (err) => {
+        clearTimeout(timeout);
+        ws.close();
+        reject(new Error(`WebSocket error connecting to ComfyUI: ${err.message}`));
+      };
+
+    } catch (error) {
+      if (ws) ws.close();
+      clearTimeout(timeout);
+      reject(error);
+    }
+  });
+}
+
 const imgModels = [
   ...Object.keys(modelsData),
   'Playground',
-  'DallE-3'
+  'DallE-3',
+  'ComfyUI'
 ];
 
 const imageModelFunctions = {
   ...Object.fromEntries(Object.keys(modelsData).map(model => [model, generateImage])),
   'Playground': generateWithPlayground,
-  'DallE-3': generateWithDalle3
+  'DallE-3': generateWithDalle3,
+  'ComfyUI': generateWithComfyUI
 };
 
 export {
@@ -418,6 +532,7 @@ export {
   generateWithPlayground,
   generateImage,
   generateWithDalle3,
+  generateWithComfyUI,
   imgModels,
   imageModelFunctions
 };

@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 import fs from 'fs';
+import { fluxPromptMaster } from '../text/fluxPromptMaster.js';
 import {
   GoogleGenerativeAI
 } from '@google/generative-ai';
@@ -85,9 +86,17 @@ async function enhancePrompt1(prompt) {
   return prompt;
 }
 
-async function enhancePrompt(prompt, attempts = 3) {
+async function enhancePrompt(prompt, modelName, attempts = 3) {
+  let systemPrompt = diffusionMaster; // Default system prompt
+
+  // Check if the model is a Flux model and switch the system prompt
+  if (modelName && (modelName.includes('FLUX') || modelName === 'ComfyUI' || modelName === 'Kolors')) {
+     console.log(`Using FLUX-specific prompt enhancer for model: ${modelName}`);
+     systemPrompt = fluxPromptMaster;
+  }
+
   const generate = async () => {
-    const model = await genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest", systemInstruction: { role: "system", parts: [{ text: diffusionMaster }] } });
+    const model = await genAI.getGenerativeModel({ model: "gemini-2.5-flash", systemInstruction: { role: "system", parts: [{ text: systemPrompt }] } });
     const result = await model.generateContent(prompt);
     return result.response.text();
   };
@@ -105,7 +114,8 @@ async function enhancePrompt(prompt, attempts = 3) {
       if (match) {
         content = match[1].trim();
       } else {
-        throw new Error(`Enhanced prompt not found`);
+        // If no code block, we assume the whole response is the prompt, but log a warning.
+        console.warn("Prompt enhancer did not return a code block. Using the full response.");
       }
       return content;
     } catch (error) {

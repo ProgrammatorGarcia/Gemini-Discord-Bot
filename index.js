@@ -193,7 +193,7 @@ loadStateFromFile();
 
 // <=====[Configuration]=====>
 
-const MODEL = "gemini-2.5-pro-preview-06-05";
+const MODEL = "gemini-2.5-pro";
 
 /*
 `BLOCK_NONE`  -  Always show regardless of probability of unsafe content
@@ -1096,12 +1096,20 @@ async function genimg(prompt, message) {
   const generatingMsg = await message.reply({ content: `Generating your image, please wait... 🖌️` });
 
   try {
-    const { imageResult, enhancedPrompt } = await generateImageWithPrompt(prompt, message.author.id);
-    const imageUrl = imageResult.images[0].url;
+        const { imageResult, enhancedPrompt } = await generateImageWithPrompt(prompt, message.author.id);
+    const firstImage = imageResult.images[0];
+    const imageSource = firstImage.url || firstImage.buffer;
     const modelUsed = imageResult.modelUsed;
     const isGuild = message.guild !== null;
-    const imageExtension = path.extname(imageUrl) || '.png';
-    const attachment = new AttachmentBuilder(imageUrl, { name: `generated-image${imageExtension}` });
+    
+    let imageExtension;
+    if (typeof imageSource === 'string') { // It's a URL
+        imageExtension = path.extname(imageSource) || '.png';
+    } else { // It's a buffer from ComfyUI
+        imageExtension = '.png';
+    }
+
+    const attachment = new AttachmentBuilder(imageSource, { name: `generated-image${imageExtension}` });
     const embed = new EmbedBuilder()
       .setColor(hexColour)
       .setAuthor({ name: `To ${message.author.displayName}`, iconURL: message.author.displayAvatarURL() })
@@ -1175,12 +1183,20 @@ async function handleImageGenerationError(interaction, prompt) {
 
 async function generateAndSendImage(prompt, interaction) {
   try {
-    const { imageResult, enhancedPrompt } = await generateImageWithPrompt(prompt, interaction.user.id);
-    const imageUrl = imageResult.images[0].url;
+        const { imageResult, enhancedPrompt } = await generateImageWithPrompt(prompt, interaction.user.id);
+    const firstImage = imageResult.images[0];
+    const imageSource = firstImage.url || firstImage.buffer;
     const modelUsed = imageResult.modelUsed;
     const isGuild = interaction.guild !== null;
-    const imageExtension = path.extname(imageUrl) || '.png';
-    const attachment = new AttachmentBuilder(imageUrl, { name: `generated-image${imageExtension}` });
+
+    let imageExtension;
+    if (typeof imageSource === 'string') { // It's a URL
+      imageExtension = path.extname(imageSource) || '.png';
+    } else { // It's a buffer from ComfyUI
+      imageExtension = '.png';
+    }
+
+    const attachment = new AttachmentBuilder(imageSource, { name: `generated-image${imageExtension}` });
 
     const embed = new EmbedBuilder()
       .setColor(hexColour)
@@ -1525,7 +1541,7 @@ async function generateImageWithPrompt(prompt, userId) {
     let enhancedPromptStatus;
 
     if (userPreferredImagePromptEnhancement[userId]) {
-      finalPrompt = await enhancePrompt(finalPrompt);
+      finalPrompt = await enhancePrompt(finalPrompt, selectedModel);
       enhancedPromptStatus = finalPrompt;
     } else {
       enhancedPromptStatus = 'Disabled';
