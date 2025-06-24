@@ -23,7 +23,7 @@ Gemini Discord Bot is an advanced, multimodal Discord bot leveraging Google Gene
 1. Clone the repository:
 
     ```sh
-    git clone https://github.com/hihumanzone/Gemini-Discord-Bot
+    git clone https://github.com/ProgrammatorGarcia/Gemini-Discord-Bot
     cd Gemini-Discord-Bot
     ```
 
